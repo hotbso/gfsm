@@ -24,10 +24,7 @@ SOFTWARE.
 */
 
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <time.h>
 #include <stdarg.h>
 
 #include "XPLMPlugin.h"
@@ -35,16 +32,10 @@ SOFTWARE.
 #include "XPLMUtilities.h"
 #include "XPLMProcessing.h"
 
-#define UNUSED(x) (void)(x)
-
 #define VERSION "1.0-b1"
 
-static float game_loop_cb(float elapsed_last_call,
-                float elapsed_last_loop, int counter,
-                void *in_refcon);
 
-
-static XPLMDataRef date_day_dr, gfsm_season_dr;
+static XPLMDataRef date_day_dr, latitude_dr, gfsm_season_dr;
 static int day_prev;
 static int gfsm_season = 1; /* init to a reasonable value */
 
@@ -78,21 +69,23 @@ set_season(void)
     if (day == day_prev)
         return;
 
-    log_msg("day: %d/%d", day_prev, day);
-    day_prev = day;
-
     if (day < 80)
-        gfsm_season = 4;
+        gfsm_season = -2;
     else if (day < 170)
         gfsm_season = 1;
     else if (day < 260)
         gfsm_season = 2;
     else if (day < 350)
-        gfsm_season = 3;
+        gfsm_season = -1;
     else
-        gfsm_season = 4;
+        gfsm_season = -2;
 
-    log_msg("Season: %d", gfsm_season);
+    double lat = XPLMGetDatad(latitude_dr);
+    if (lat < 0)
+        gfsm_season = -gfsm_season;
+
+    log_msg("day: %d->%d, season: %d", day_prev, day, gfsm_season);
+    day_prev = day;
 }
 
 PLUGIN_API int
@@ -103,15 +96,16 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     strcpy(out_sig, "gfsm.hotbso");
     strcpy(out_desc, "A plugin that manages GlobalForests seasons");
 
-    XPLMRegisterFlightLoopCallback(game_loop_cb, 1.0f, NULL);
-
     date_day_dr = XPLMFindDataRef("sim/time/local_date_days");
+    latitude_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
+
     gfsm_season_dr = XPLMRegisterDataAccessor("GlobalForests/season", xplmType_Int, 0, read_season_acc,
-                                            NULL, NULL, NULL, NULL,
-                                            NULL, NULL, NULL, NULL,
-                                            NULL, NULL, NULL, NULL,
-                                            NULL);
-    if (NULL == date_day_dr || NULL == gfsm_season_dr) {
+                                              NULL, NULL, NULL, NULL,
+                                              NULL, NULL, NULL, NULL,
+                                              NULL, NULL, NULL, NULL,
+                                              NULL);
+
+    if (NULL == date_day_dr || NULL == gfsm_season_dr || NULL == latitude_dr) {
         log_msg("Sorry, can't define dataref");
         return 0;
     }
@@ -142,18 +136,6 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 {
-    UNUSED(in_from);
     /* try to catch any event that may come prior to a scenery reload */
     set_season();
-}
-
-/* try to catch any event that may come prior to a scenery reload */
-
-static float
-game_loop_cb(float elapsed_last_call,
-             float elapsed_last_loop, int counter, void *in_refcon)
-{
-    float loop_delay = 1.0f;
-    set_season();
-    return loop_delay;
 }
