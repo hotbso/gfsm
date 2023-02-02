@@ -1,11 +1,12 @@
 .SUFFIXES: .obj
 
-TARGET=win.xpl
+TARGET=gfsm.xpl
 HEADERS=$(wildcard *.h)
 SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 SDK=../SDK
-PLUGDIR=/e/X-Plane-12/Resources/plugins/gfsm
+SCENERYDIR=G:/OrbxLibrary/xp12/Global Forests v2/Custom Scenery/Global_Forests_v2
+PLUGDIR=$(SCENERYDIR)/plugins/gfsm/win_x64
 
 CC=x86_64-w64-mingw32-gcc
 LD=x86_64-w64-mingw32-gcc
@@ -30,11 +31,11 @@ clean:
 
 # install the just compiled target
 install: $(TARGET)
-	mkdir -p "$(PLUGDIR)/64"
-	cp -p $(TARGET) "$(PLUGDIR)/64"
+	mkdir -p "$(PLUGDIR)"
+	cp -p $(TARGET) "$(PLUGDIR)"
 
 # create the whole plugin directory
 plugin: $(TARGET)
-	mkdir -p "$(PLUGDIR)/64"
-	cp -p $(TARGET) "$(PLUGDIR)/64"
-	cp -p *.cfg "$(PLUGDIR)"
+	mkdir -p "$(PLUGDIR)"
+	cp -p $(TARGET) "$(PLUGDIR)"
+	cp -p library.txt "$(SCENERYDIR)"
