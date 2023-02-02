@@ -33,7 +33,7 @@ SOFTWARE.
 #include "XPLMProcessing.h"
 #include "XPLMMenus.h"
 
-#define VERSION "1.0-b1"
+#define VERSION "1.0"
 
 static char pref_path[512];
 static const char *psep;
