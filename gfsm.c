@@ -44,6 +44,7 @@ static int gfsm_enabled;
 static XPLMDataRef date_day_dr, latitude_dr, gfsm_season_dr;
 static int day_prev;
 static int gfsm_season = 0; /* init as disabled before using pref file */
+static int cached_season = -10;
 
 static void
 log_msg(const char *fmt, ...)
@@ -66,7 +67,7 @@ save_pref()
     if (NULL == f)
         return;
 
-    fprintf(f, "%d", gfsm_enabled);
+    fprintf(f, "%d,%d", gfsm_enabled, gfsm_season);  // cache current season
     fclose(f);
 }
 
@@ -78,8 +79,8 @@ load_pref()
     if (NULL == f)
         return;
 
-    if (1 == fscanf(f, "%i", &gfsm_enabled))
-        log_msg("From pref: gfsm_enabled: %d", gfsm_enabled);
+    if (1 <= fscanf(f, "%i,%i", &gfsm_enabled, &cached_season))
+        log_msg("From pref: gfsm_enabled: %d, cached_season: %d", gfsm_enabled, cached_season);
     else {
         gfsm_enabled = 0;
         log_msg("Error readinf pref");
@@ -164,6 +165,15 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     menu_id = XPLMCreateMenu("GlobalForests Manager", menu, sub_menu, menu_cb, NULL);
     enable_item = XPLMAppendMenuItem(menu_id, "Orthophoto mode", &gfsm_enabled, 0);
 
+    load_pref();
+    XPLMCheckMenuItem(menu_id, enable_item,
+                      gfsm_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
+
+    if ((cached_season >= -2) && gfsm_enabled)
+        gfsm_season = cached_season;
+    else
+        set_season();   /* likely to be always spring here */
+
     date_day_dr = XPLMFindDataRef("sim/time/local_date_days");
     latitude_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
 
@@ -198,10 +208,6 @@ XPluginDisable(void)
 PLUGIN_API int
 XPluginEnable(void)
 {
-    load_pref();
-    XPLMCheckMenuItem(menu_id, enable_item,
-                      gfsm_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
-    set_season();
     return 1;
 }
 
