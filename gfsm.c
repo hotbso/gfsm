@@ -31,13 +31,19 @@ SOFTWARE.
 #include "XPLMDataAccess.h"
 #include "XPLMUtilities.h"
 #include "XPLMProcessing.h"
+#include "XPLMMenus.h"
 
 #define VERSION "1.0-b1"
 
+static char pref_path[512];
+static const char *psep;
+static XPLMMenuID menu_id;
+static int enable_item;
+static int gfsm_enabled;
 
 static XPLMDataRef date_day_dr, latitude_dr, gfsm_season_dr;
 static int day_prev;
-static int gfsm_season = 1; /* init to a reasonable value */
+static int gfsm_season = 0; /* init as disabled before using pref file */
 
 static void
 log_msg(const char *fmt, ...)
@@ -53,6 +59,33 @@ log_msg(const char *fmt, ...)
     va_end(ap);
 }
 
+static void
+save_pref()
+{
+    FILE *f = fopen(pref_path, "w");
+    if (NULL == f)
+        return;
+
+    fprintf(f, "%d", gfsm_enabled);
+    fclose(f);
+}
+
+
+static void
+load_pref()
+{
+    FILE *f  = fopen(pref_path, "r");
+    if (NULL == f)
+        return;
+
+    if (1 == fscanf(f, "%i", &gfsm_enabled))
+        log_msg("From pref: gfsm_enabled: %d", gfsm_enabled);
+    else {
+        gfsm_enabled = 0;
+        log_msg("Error readinf pref");
+    }
+    fclose(f);
+}
 
 // Accessor for the "GlobalForests/season" dataref
 static int
@@ -65,6 +98,11 @@ read_season_acc(void *ref)
 static void
 set_season(void)
 {
+    if (! gfsm_enabled) {
+        gfsm_season = 0;
+        return;
+    }
+
     int day = XPLMGetDatai(date_day_dr);
     if (day == day_prev)
         return;
@@ -88,13 +126,43 @@ set_season(void)
     day_prev = day;
 }
 
+static void
+menu_cb(void *menu_ref, void *item_ref)
+{
+    if ((int *)item_ref == &gfsm_enabled) {
+        gfsm_enabled = !gfsm_enabled;
+        XPLMCheckMenuItem(menu_id, enable_item,
+                          gfsm_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
+        set_season();
+        save_pref();
+    }
+}
+
 PLUGIN_API int
 XPluginStart(char *out_name, char *out_sig, char *out_desc)
 {
+    XPLMMenuID menu;
+    int sub_menu;
 
     strcpy(out_name, "gfsm " VERSION);
     strcpy(out_sig, "gfsm.hotbso");
     strcpy(out_desc, "A plugin that manages GlobalForests seasons");
+
+    /* Always use Unix-native paths on the Mac! */
+    XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
+
+    psep = XPLMGetDirectorySeparator();
+
+    /* set pref path */
+    XPLMGetPrefsPath(pref_path);
+    XPLMExtractFileAndPath(pref_path);
+    strcat(pref_path, psep);
+    strcat(pref_path, "gfsm.prf");
+
+    menu = XPLMFindPluginsMenu();
+    sub_menu = XPLMAppendMenuItem(menu, "GlobalForests Manager", NULL, 1);
+    menu_id = XPLMCreateMenu("GlobalForests Manager", menu, sub_menu, menu_cb, NULL);
+    enable_item = XPLMAppendMenuItem(menu_id, "Orthophoto mode", &gfsm_enabled, 0);
 
     date_day_dr = XPLMFindDataRef("sim/time/local_date_days");
     latitude_dr = XPLMFindDataRef("sim/flightmodel/position/latitude");
@@ -123,12 +191,16 @@ XPluginStop(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
+    save_pref();
 }
 
 
 PLUGIN_API int
 XPluginEnable(void)
 {
+    load_pref();
+    XPLMCheckMenuItem(menu_id, enable_item,
+                      gfsm_enabled ? xplm_Menu_Checked : xplm_Menu_Unchecked);
     set_season();
     return 1;
 }
